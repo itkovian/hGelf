@@ -1,0 +1,42 @@
+name: hGelf
+version: 0.0.1
+cabal-version: >=1.14
+build-type: Simple
+license: AllRightsReserved
+license-file: BSD3
+copyright: Andy Georges
+maintainer: itkovian@gmail.com
+stability: experimental
+synopsis: Haskell GELF library
+description:  
+category: Network
+author: Andy Georges
+tested-with: GHC ==7.4.1
+data-dir: ""
+ 
+library
+    build-depends: QuickCheck -any, base -any, network >=2.3.0.13
+    exposed-modules: Network.Gelf
+    exposed: True
+    buildable: True
+    cpp-options: -DMAIN_FUNCTION=testMain
+    extensions: OverloadedStrings
+    hs-source-dirs: src
+    other-modules: Network.Gelf.Chunk
+ 
+executable hGelf
+    build-depends: QuickCheck -any, base -any, network >=2.3.0.13
+    main-is: Main.hs
+    buildable: True
+    extensions: OverloadedStrings
+    hs-source-dirs: src
+    other-modules: Network.Gelf Network.Gelf.Chunk
+ 
+test-suite test-hGelf
+    build-depends: QuickCheck -any, base -any, network >=2.3.0.13
+    type: exitcode-stdio-1.0
+    main-is: Main.hs
+    buildable: True
+    cpp-options: -DMAIN_FUNCTION=testMain
+    extensions: OverloadedStrings
+    hs-source-dirs: src
