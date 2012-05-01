@@ -26,9 +26,13 @@ import qualified Data.Text as T
 import Network.BSD (getHostName)
 import System.Time (getClockTime, ClockTime(TOD))
 
+import Network.Gelf.Chunk (split)
+
 {- TODO:
- - timestamp: specs state microsecond timestamp, so correct this
- -
+ - * timestamp: specs state microsecond timestamp, so correct this
+ - * wrap this in a monad stack with IO at the bottom, and some static
+ -   configuration info on top of that, e.g., for setting the hostname,
+ -   the destination port, chunk size, etc.
  -}
 
 catSecondMaybes :: [(a, Maybe b)]
@@ -63,6 +67,7 @@ gelfMessage shortMessage longMessage hostname timestamp filename lineNumber fiel
                     ++ (map (\(k, v) -> (k, A.toJSON `fmap` v)) fields)
     in A.object $ catSecondMaybes allFields
 
+
 -- | Encode a log message as a GELF message.
 --
 -- This function wraps a given log message in a GELF structure. It creates the
@@ -83,8 +88,8 @@ encode chunkSize shortMessage longMessage hostname timestamp filename lineNumber
         bs = compress $ A.encode j
     in if (BSL.length bs) + 2 < (fromIntegral chunkSize)
           then [BSL.cons 0x1f $ BSL.cons 0x8b bs]
-          else undefined
-
+          else split chunkSize id bs
+  where id = undefined
 
 
 -- | Send a log message to a server accepting Graylog2 messages.
