@@ -1,5 +1,5 @@
 name: hGelf
-version: 0.0.1
+version: 0.1
 cabal-version: >=1.14
 build-type: Simple
 license: AllRightsReserved
