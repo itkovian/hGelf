@@ -14,16 +14,18 @@
 -----------------------------------------------------------------------------
 
 module Network.Gelf (
-    send
+    Network.Gelf.send
   , encode
 ) where
 
-import Codec.Compression.GZip (compress)
+import Codec.Compression.Zlib (compress)
 import qualified Data.Aeson as A
 import qualified Data.ByteString.Lazy as BSL
 import Data.Maybe (isJust)
 import qualified Data.Text as T
 import Network.BSD (getHostName)
+import Network.Socket
+import qualified Network.Socket.ByteString.Lazy as NSBL
 import System.Time (getClockTime, ClockTime(TOD))
 
 import Network.Gelf.Chunk (split)
@@ -87,20 +89,26 @@ encode chunkSize shortMessage longMessage hostname timestamp filename lineNumber
     let j = gelfMessage shortMessage longMessage hostname timestamp filename lineNumber fields
         bs = compress $ A.encode j
     in if (BSL.length bs) + 2 < (fromIntegral chunkSize)
-          then [BSL.cons 0x1f $ BSL.cons 0x8b bs]
+          then [bs]
           else split chunkSize id bs
-  where id = undefined
+  where id = fromIntegral 1234
 
 
 -- | Send a log message to a server accepting Graylog2 messages.
-send :: T.Text                      -- ^Short message
+send :: HostName                    -- ^Remote hostname of the graylog server
+     -> String                      -- ^Port number
+     -> T.Text                      -- ^Short message
      -> Maybe T.Text                -- ^Long message (optional)
      -> Maybe T.Text                -- ^Filename of the message cause
      -> Maybe Integer               -- ^Line in the file where the message was sent for
      -> [(T.Text, Maybe T.Text)]    -- ^Additional fields (name, information), should not contain 'id' as name
      -> IO ()                       -- ^Does I/O
-send shortMessage longMessage filename lineNumber fields = do
+send serverName serverPort shortMessage longMessage filename lineNumber fields = do
+    addressInfos <- getAddrInfo Nothing (Just serverName) (Just serverPort)
+    let serverAddress = head addressInfos -- FIXME: this should handle errors too
+    sock <- socket (addrFamily serverAddress) Datagram defaultProtocol
     hostname <- getHostName
     timestamp <- getClockTime >>= (\(TOD seconds _) -> return seconds)
     let ms = encode 256 shortMessage longMessage hostname timestamp filename lineNumber fields
-    return ()
+    r <- mapM (NSBL.send sock) ms 
+    putStrLn $ show r
