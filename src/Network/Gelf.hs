@@ -19,10 +19,17 @@ module Network.Gelf (
 ) where
 
 import Codec.Compression.Zlib (compress)
+import Control.Arrow (second)
 import qualified Data.Aeson as A
+import Data.Bits(shiftL, (.|.))
+import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString.Lazy.Char8 as BSLC
+import Data.Digest.Pure.MD5 (md5)
 import Data.Maybe (isJust)
 import qualified Data.Text as T
+import qualified Data.Serialize as DS (encode)
+import Data.Word
 import Network.BSD (getHostName)
 import Network.Socket
 import qualified Network.Socket.ByteString.Lazy as NSBL
@@ -66,7 +73,7 @@ gelfMessage shortMessage longMessage hostname timestamp filename lineNumber fiel
                     , ("facility", A.toJSON `fmap` Just ("GELF" :: T.Text))
                     , ("line", A.toJSON `fmap` Just lineNumber)
                     , ("file", A.toJSON `fmap` Just filename) ]
-                    ++ (map (\(k, v) -> (k, A.toJSON `fmap` v)) fields)
+                    ++ map (second (fmap A.toJSON)) fields
     in A.object $ catSecondMaybes allFields
 
 
@@ -88,10 +95,10 @@ encode :: Int                         -- ^Maximal chunk size
 encode chunkSize shortMessage longMessage hostname timestamp filename lineNumber fields =
     let j = gelfMessage shortMessage longMessage hostname timestamp filename lineNumber fields
         bs = compress $ A.encode j
-    in if (BSL.length bs) + 2 < (fromIntegral chunkSize)
+    in if BSL.length bs + 2 < fromIntegral chunkSize
           then [bs]
           else split chunkSize id bs
-  where id = fromIntegral 1234
+  where id = foldl1 (\w b -> shiftL w 8 .|. b) . map fromIntegral . BS.unpack . BS.take 8 . DS.encode . md5 . BSLC.pack $ hostname ++ show timestamp :: Word64
 
 
 -- | Send a log message to a server accepting Graylog2 messages.
