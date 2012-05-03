@@ -97,18 +97,19 @@ encode chunkSize shortMessage longMessage hostname timestamp filename lineNumber
 -- | Send a log message to a server accepting Graylog2 messages.
 send :: HostName                    -- ^Remote hostname of the graylog server
      -> String                      -- ^Port number
+     -> Int                         -- ^Chunk size
      -> T.Text                      -- ^Short message
      -> Maybe T.Text                -- ^Long message (optional)
      -> Maybe T.Text                -- ^Filename of the message cause
      -> Maybe Integer               -- ^Line in the file where the message was sent for
      -> [(T.Text, Maybe T.Text)]    -- ^Additional fields (name, information), should not contain 'id' as name
      -> IO ()                       -- ^Does I/O
-send serverName serverPort shortMessage longMessage filename lineNumber fields = do
+send serverName serverPort chunkSize shortMessage longMessage filename lineNumber fields = do
     addressInfos <- getAddrInfo Nothing (Just serverName) (Just serverPort)
     let serverAddress = head addressInfos -- FIXME: this should handle errors too
     sock <- socket (addrFamily serverAddress) Datagram defaultProtocol
+    connect sock (addrAddress serverAddress)
     hostname <- getHostName
     timestamp <- getClockTime >>= (\(TOD seconds _) -> return seconds)
-    let ms = encode 256 shortMessage longMessage hostname timestamp filename lineNumber fields
-    r <- mapM (NSBL.send sock) ms 
-    putStrLn $ show r
+    let ms = encode chunkSize shortMessage longMessage hostname timestamp filename lineNumber fields
+    mapM_ (NSBL.send sock) ms 

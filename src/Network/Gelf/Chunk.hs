@@ -28,7 +28,7 @@ split :: Int              -- ^Chunk size
       -> [BSL.ByteString] -- ^Resulting chunks
 split size id bs =
     let cs = split' bs
-    in zipWith (chunkify (length cs)) cs [1..]
+    in zipWith (chunkify (length cs)) cs [0..]
   where split' :: BSL.ByteString -> [BSL.ByteString]
         split' bs =
             if BSL.length bs == 0
