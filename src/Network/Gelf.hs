@@ -14,7 +14,10 @@
 -----------------------------------------------------------------------------
 
 module Network.Gelf (
-    Network.Gelf.send
+    GelfConnection
+  , mkGelfConnection
+  , closeGelfConnection
+  , Network.Gelf.send
   , encode
 ) where
 
@@ -43,6 +46,31 @@ import Network.Gelf.Chunk (split)
  -   configuration info on top of that, e.g., for setting the hostname,
  -   the destination port, chunk size, etc.
  -}
+
+data GelfConnection = GelfConnection
+    { graylogHost   :: String
+    , graylogPort   :: Int
+    , graylogChunk  :: Int
+    , graylogSocket :: Socket
+    }
+
+mkGelfConnection :: String          -- ^Host name of the Graylog server
+                 -> Int             -- ^Port number
+                 -> Int             -- ^Chunk size
+                 -> IO GelfConnection  -- ^Resulting connection record
+mkGelfConnection serverName serverPort chunkSize = do
+    addressInfos <- getAddrInfo Nothing (Just serverName) (Just $ show serverPort)
+    let serverAddress = head addressInfos -- FIXME: this should handle errors too
+    sock <- socket (addrFamily serverAddress) Datagram defaultProtocol
+    return $ GelfConnection { graylogHost = serverName
+                            , graylogPort = serverPort
+                            , graylogChunk = chunkSize
+                            , graylogSocket = sock
+                            }
+
+closeGelfConnection :: GelfConnection -- ^The connection to the Graylog server
+                    -> IO ()
+closeGelfConnection conn = sClose $ graylogSocket conn
 
 catSecondMaybes :: [(a, Maybe b)]
                 -> [(a, b)]
@@ -102,21 +130,17 @@ encode chunkSize shortMessage longMessage hostname timestamp filename lineNumber
 
 
 -- | Send a log message to a server accepting Graylog2 messages.
-send :: HostName                    -- ^Remote hostname of the graylog server
-     -> String                      -- ^Port number
-     -> Int                         -- ^Chunk size
+send :: GelfConnection              -- ^Connection to the Graylog server
      -> T.Text                      -- ^Short message
      -> Maybe T.Text                -- ^Long message (optional)
      -> Maybe T.Text                -- ^Filename of the message cause
      -> Maybe Integer               -- ^Line in the file where the message was sent for
      -> [(T.Text, Maybe T.Text)]    -- ^Additional fields (name, information), should not contain 'id' as name
      -> IO ()                       -- ^Does I/O
-send serverName serverPort chunkSize shortMessage longMessage filename lineNumber fields = do
-    addressInfos <- getAddrInfo Nothing (Just serverName) (Just serverPort)
-    let serverAddress = head addressInfos -- FIXME: this should handle errors too
-    sock <- socket (addrFamily serverAddress) Datagram defaultProtocol
-    connect sock (addrAddress serverAddress)
+send connection shortMessage longMessage filename lineNumber fields = do
     hostname <- getHostName
     timestamp <- getClockTime >>= (\(TOD seconds _) -> return seconds)
-    let ms = encode chunkSize shortMessage longMessage hostname timestamp filename lineNumber fields
-    mapM_ (NSBL.send sock) ms 
+    let sock = graylogSocket connection
+        chunkSize = graylogChunk connection
+        ms = encode chunkSize shortMessage longMessage hostname timestamp filename lineNumber fields
+    mapM_ (NSBL.send sock) ms
